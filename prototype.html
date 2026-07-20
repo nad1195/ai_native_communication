@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>에이닷 전화 · AI Native Communication 프로토타입</title>
+<style>
+  :root{
+    --green:#34c759; --red:#ff3b30; --blue:#3d7dff; --ai:#5b6bff;
+    --gray-bg:#f6f6f8; --line:#eceff3; --text:#111318; --dim:#8b8f9b;
+    --pill-bg:#f0f1f4; --pink:#ff6b9d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; height:100%; background:#e8eaf0; font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",sans-serif;}
+  .stage{
+    display:flex; gap:56px; align-items:flex-start; justify-content:center;
+    padding:40px 20px 80px; min-height:100vh;
+  }
+  /* ---------------- top mode switch ---------------- */
+  .modebar{
+    position:fixed; top:20px; left:50%; transform:translateX(-50%);
+    display:flex; gap:4px; background:#1c1e26; padding:6px; border-radius:26px; z-index:50;
+    box-shadow:0 8px 24px rgba(0,0,0,0.18);
+  }
+  .modebar button{
+    border:none; background:transparent; color:#aaa; font-size:12.5px; font-weight:700;
+    padding:9px 16px; border-radius:20px; cursor:pointer; letter-spacing:.2px; white-space:nowrap;
+  }
+  .modebar button.active{background:#fff; color:#111;}
+
+  /* ---------------- phone frame ---------------- */
+  .phone-col{display:flex; flex-direction:column; align-items:center; gap:14px; margin-top:70px;}
+  .phone-label{font-size:13px; font-weight:700; color:#444; letter-spacing:.5px; text-align:center;}
+  .phone-label .sub{font-weight:400; color:#999; margin-left:6px;}
+  .phone{
+    width:375px; height:812px; background:#000; border-radius:52px; padding:12px;
+    box-shadow:0 30px 60px rgba(0,0,0,0.25);
+    position:relative;
+  }
+  .screen{
+    width:100%; height:100%; background:#fff; border-radius:40px; overflow:hidden; position:relative;
+    display:flex; flex-direction:column;
+  }
+  .island{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    width:120px; height:32px; background:#000; border-radius:20px; z-index:40;
+  }
+  .statusbar{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:16px 26px 6px; font-size:15px; font-weight:600; color:#111; flex-shrink:0;
+  }
+  .statusbar .icons{display:flex; gap:5px; align-items:center; font-size:13px;}
+
+  .app-body{flex:1; overflow-y:auto; position:relative;}
+  .app-body::-webkit-scrollbar{display:none;}
+
+  /* top nav within app */
+  .topnav{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:6px 18px 14px; position:sticky; top:0; background:#fff; z-index:10;
+  }
+  .topnav .ttl{font-size:20px; font-weight:800;}
+  .topnav .icons{display:flex; gap:16px; font-size:18px; color:#111;}
+  .back{font-size:20px; margin-right:4px; color:#111;}
+
+  /* bottom tab bar */
+  .tabbar{
+    position:absolute; bottom:10px; left:14px; right:14px;
+    background:#f1f2f5; border-radius:26px; display:flex; padding:6px; z-index:30;
+    box-shadow:0 4px 14px rgba(0,0,0,0.08);
+  }
+  .tabbar .tab{
+    flex:1; text-align:center; padding:10px 4px; border-radius:20px; font-size:13px; font-weight:700;
+    color:#8b8f9b; cursor:pointer; transition:.15s;
+  }
+  .tabbar .tab.active{background:#fff; color:#111;}
+  .tabbar .tab .ico{display:block; font-size:16px; margin-bottom:2px;}
+  .tabbar .tab.spotlight{position:relative;}
+  .tabbar .tab.spotlight::after{
+    content:"NEW"; position:absolute; top:-7px; right:6px; background:var(--ai); color:#fff; font-size:8px; font-weight:800;
+    padding:2px 5px; border-radius:6px; letter-spacing:.4px; animation:pulseBadge 1.6s infinite;
+  }
+  @keyframes pulseBadge{ 0%,100%{ transform:scale(1); opacity:1;} 50%{ transform:scale(1.18); opacity:.7;} }
+
+  /* 완성형: '연결'을 가운데 강조하는 hero 내비게이션 */
+  .tabbar.hero-nav{ align-items:flex-end; padding-bottom:8px; }
+  .tabbar.hero-nav .tab.minor{ flex:0.8; font-size:11px; opacity:.7; padding:9px 2px; }
+  .tabbar.hero-nav .tab.minor .ico{ font-size:14px; }
+  .tabbar.hero-nav .tab.hero{
+    flex:0 0 auto; min-width:104px; background:linear-gradient(135deg,var(--ai),#8f9bff); color:#fff;
+    border-radius:28px; padding:14px 22px; font-size:13.5px; font-weight:800;
+    box-shadow:0 8px 20px rgba(91,107,255,0.45); transform:translateY(-14px);
+  }
+  .tabbar.hero-nav .tab.hero .ico{ font-size:20px; }
+  .tabbar.hero-nav .tab.hero.active{ background:linear-gradient(135deg,#4c5bff,var(--ai)); color:#fff; }
+  .tabbar.hero-nav .tab.minor.active{ background:transparent; color:#111; opacity:1; }
+
+  /* ---------------- generic list ---------------- */
+  .search{
+    margin:0 18px 12px; background:var(--gray-bg); border-radius:12px; padding:10px 14px;
+    color:var(--dim); font-size:14px;
+  }
+  .chiprow{display:flex; gap:8px; padding:0 18px 14px; overflow-x:auto;}
+  .chiprow::-webkit-scrollbar{display:none;}
+  .chip{
+    flex-shrink:0; padding:7px 15px; border-radius:16px; background:var(--pill-bg); font-size:13px; font-weight:600; color:#555; cursor:pointer;
+  }
+  .chip.on{background:#111; color:#fff;}
+
+  .row{
+    display:flex; align-items:center; gap:12px; padding:13px 18px; border-bottom:1px solid var(--line); cursor:pointer;
+  }
+  .row:active{background:#fafafa;}
+  .avatar{
+    width:44px; height:44px; border-radius:50%; background:linear-gradient(135deg,#ffd1e3,#ffe8b0);
+    display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;
+  }
+  .row .body{flex:1; min-width:0;}
+  .row .name-line{display:flex; align-items:center; gap:6px; font-size:15.5px; font-weight:700; color:#111;}
+  .tagpill{font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:8px;}
+  .tagpill.fam{background:#ffe3ea; color:#e0396b;}
+  .tagpill.frn{background:#e6f0ff; color:#3d7dff;}
+  .tagpill.wrk{background:#eaf7ec; color:#249a4a;}
+  .tagpill.etc{background:#f1f1f4; color:#777;}
+  .row .snippet{font-size:13px; color:var(--dim); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .row .snippet .ico{margin-right:3px;}
+  .row .meta{font-size:11.5px; color:#c2c5cc; text-align:right; flex-shrink:0; margin-left:6px;}
+  .callbtn{
+    width:34px; height:34px; border-radius:50%; border:1.4px solid #e2e5ea; display:flex; align-items:center; justify-content:center; color:var(--green); font-size:15px; flex-shrink:0;
+  }
+
+  .section-label{padding:16px 18px 6px; font-size:12px; font-weight:700; color:#aaa; letter-spacing:.5px;}
+
+  /* keypad (plain) */
+  .keypad{padding:20px 34px; display:grid; grid-template-columns:repeat(3,1fr); gap:14px; justify-items:center;}
+  .key{
+    width:72px; height:72px; border-radius:50%; background:#f4f5f7; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; font-size:26px; font-weight:500; color:#111; cursor:pointer;
+  }
+  .key small{font-size:9.5px; color:#999; letter-spacing:1px; margin-top:1px;}
+  .dialbtn{grid-column:2; width:64px; height:64px; border-radius:50%; background:var(--green); color:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; margin-top:6px;}
+
+  .ai-card{
+    margin:14px 18px; padding:16px 18px; border-radius:18px;
+    background:linear-gradient(120deg,#dff3ff,#eafff1);
+  }
+  .ai-card .h{font-size:14.5px; font-weight:700; color:#111; margin-bottom:2px;}
+  .ai-card .s{font-size:12px; color:#666;}
+
+  /* ---------------- connect (채널 → 속성) attribute selector ---------------- */
+  .connect-section-label{padding:14px 18px 4px; font-size:12px; font-weight:800; color:var(--ai); letter-spacing:.5px;}
+  .connect-divider{
+    display:flex; align-items:center; gap:10px; margin:22px 18px 2px; font-size:11.5px; font-weight:700; color:#b7bac2;
+  }
+  .connect-divider::before, .connect-divider::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+  .who-picker{padding:0 18px 6px;}
+  .who-scroll{display:flex; gap:14px; overflow-x:auto; padding:4px 0 10px;}
+  .who-item{flex-shrink:0; text-align:center; width:58px; cursor:pointer;}
+  .who-item .avatar{width:52px; height:52px; margin:0 auto 6px; font-size:22px;}
+  .who-item.sel .avatar{outline:3px solid var(--ai); outline-offset:2px;}
+  .who-item .nm{font-size:11px; color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+  .attr-block{margin:8px 18px 0; padding:16px; background:#fafbfc; border:1px solid var(--line); border-radius:16px;}
+  .attr-title{font-size:12px; font-weight:700; color:#9a9ea8; letter-spacing:.5px; margin-bottom:8px;}
+  .attr-opts{display:flex; gap:8px; margin-bottom:14px;}
+  .attr-opts .opt{
+    flex:1; text-align:center; padding:11px 6px; border-radius:12px; background:#fff; border:1.6px solid var(--line);
+    font-size:13.5px; font-weight:700; color:#555; cursor:pointer;
+  }
+  .attr-opts .opt.on{border-color:var(--ai); color:var(--ai); background:#eef0ff;}
+
+  .result-card{
+    margin:14px 18px; padding:20px; border-radius:20px; text-align:center;
+    background:linear-gradient(135deg,#eef1ff,#e6fbf3); border:1px solid #e4e7ff;
+  }
+  .result-card .label{font-size:11.5px; font-weight:700; color:#8b8fa3; letter-spacing:1px; margin-bottom:6px;}
+  .result-card .big{font-size:24px; font-weight:800; color:#181a24; margin-bottom:4px;}
+  .result-card .desc{font-size:12.5px; color:#767a8a; margin-bottom:14px; line-height:1.5;}
+  .result-card .go{
+    display:inline-block; padding:12px 30px; border-radius:26px; background:#111; color:#fff; font-weight:700; font-size:14.5px; cursor:pointer;
+  }
+  .result-card.call .go{background:var(--green);}
+
+  .ref-table{margin:6px 18px 90px; font-size:11.5px; color:#999;}
+  .ref-table .rtrow{display:flex; justify-content:space-between; padding:6px 2px; border-bottom:1px dashed #eee;}
+  .ref-table .rtrow b{color:#555; font-weight:600;}
+
+  /* AI auto mode */
+  .autobox{margin:10px 18px; padding:18px; border-radius:18px; background:#fafbfc; border:1px solid var(--line);}
+  .autobox .q{font-size:13px; color:#999; margin-bottom:10px; font-weight:600;}
+  .autobox .inputline{
+    display:flex; align-items:center; gap:8px; background:#fff; border:1.6px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:12px;
+  }
+  .autobox .inputline input{border:none; outline:none; font-size:14.5px; flex:1; font-family:inherit;}
+  .presetchip{display:inline-block; margin:0 6px 8px 0; padding:8px 13px; border-radius:14px; background:#eef0ff; color:var(--ai); font-size:12.5px; font-weight:700; cursor:pointer;}
+  .thinking{display:flex; align-items:center; gap:8px; color:var(--ai); font-size:13px; font-weight:700; padding:10px 4px;}
+  .dotload{display:flex; gap:4px;}
+  .dotload span{width:6px; height:6px; border-radius:50%; background:var(--ai); animation:blink 1.1s infinite ease-in-out;}
+  .dotload span:nth-child(2){animation-delay:.15s;} .dotload span:nth-child(3){animation-delay:.3s;}
+  @keyframes blink{0%,80%,100%{opacity:.2;} 40%{opacity:1;}}
+
+  .plan-card{margin-top:10px; padding:16px; border-radius:16px; background:linear-gradient(135deg,#eef1ff,#e9fbf4); border:1px solid #e2e5ff;}
+  .plan-card .steps{margin:10px 0 0; padding:0; list-style:none;}
+  .plan-card .steps li{display:flex; gap:8px; font-size:13px; color:#333; margin-bottom:8px; line-height:1.5;}
+  .plan-card .steps li .n{width:18px; height:18px; border-radius:50%; background:var(--ai); color:#fff; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;}
+  .plan-actions{display:flex; gap:8px; margin-top:14px;}
+  .plan-actions .a{flex:1; text-align:center; padding:11px 0; border-radius:24px; font-size:13.5px; font-weight:700; cursor:pointer;}
+  .plan-actions .go{background:var(--ai); color:#fff;}
+  .plan-actions .edit{background:#fff; border:1.4px solid var(--line); color:#555;}
+
+  /* ---------------- thread detail overlay ---------------- */
+  .overlay{
+    position:absolute; inset:0; background:#fff; z-index:60; display:none; flex-direction:column;
+    border-radius:40px; overflow:hidden;
+  }
+  .overlay.show{display:flex;}
+  .thread-top{
+    display:flex; align-items:center; gap:10px; padding:50px 16px 12px; border-bottom:1px solid var(--line); flex-shrink:0;
+  }
+  .thread-top .avatar{width:36px; height:36px; font-size:16px;}
+  .thread-top .nm{font-size:16px; font-weight:800; flex:1;}
+  .thread-top .icn{font-size:17px; margin-left:10px; color:#333;}
+  .thread-scroll{flex:1; overflow-y:auto; padding:16px;}
+  .daylabel{text-align:center; font-size:11.5px; color:#bbb; margin:14px 0 10px; font-weight:600;}
+  .ev{margin-bottom:14px;}
+  .ev .ev-head{display:flex; align-items:center; gap:6px; font-size:12px; color:#999; margin-bottom:5px;}
+  .ev .ev-head .ic{font-size:13px;}
+  .bubble{
+    background:#f1f2f5; border-radius:16px; padding:12px 14px; font-size:13.5px; color:#222; line-height:1.5; max-width:88%;
+  }
+  .bubble.call{background:#eef4ff;}
+  .bubble.text{background:#f4f4f6;}
+  .bubble .aiSummary{font-size:12px; color:#3d7dff; font-weight:700; margin-bottom:4px;}
+  .bubble .play{display:flex; align-items:center; gap:8px; margin-top:8px; color:#7a86a3; font-size:11.5px;}
+
+  .close-x{
+    position:absolute; top:16px; right:16px; width:30px; height:30px; border-radius:50%; background:#f1f2f5;
+    display:flex; align-items:center; justify-content:center; font-size:15px; color:#555; cursor:pointer; z-index:5;
+  }
+
+  /* incall overlay */
+  .incall{
+    position:absolute; inset:0; background:linear-gradient(160deg,#dff3ff,#eafff4); z-index:70; display:none;
+    flex-direction:column; align-items:center; padding-top:70px; border-radius:40px;
+  }
+  .incall.show{display:flex;}
+  .incall .nm{font-size:20px; font-weight:800; margin-top:10px;}
+  .incall .sub{font-size:13px; color:#777; margin-top:2px;}
+  .incall .avatar{width:80px; height:80px; font-size:34px;}
+  .incall .transcript{
+    margin:26px 20px 0; background:#fff; border-radius:18px; padding:16px 18px; font-size:13.5px; line-height:1.7; color:#222;
+    box-shadow:0 8px 24px rgba(0,0,0,0.06); width:calc(100% - 40px);
+  }
+  .incall .aitag{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ai); font-weight:700; margin-top:20px;}
+  .incall .endbtn{
+    margin-top:auto; margin-bottom:50px; width:64px; height:64px; border-radius:50%; background:var(--red); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:24px; cursor:pointer;
+  }
+
+  /* ---------------- annotation panel ---------------- */
+  .panel{width:300px; padding-top:70px;}
+  .panel .card{
+    background:#fff; border-radius:16px; padding:20px 22px; margin-bottom:16px; box-shadow:0 6px 20px rgba(0,0,0,0.06);
+  }
+  .panel .card h3{font-size:13px; letter-spacing:1px; text-transform:uppercase; color:var(--ai); margin:0 0 8px;}
+  .panel .card p{font-size:13.5px; line-height:1.65; color:#444; margin:0;}
+  .panel .card p+p{margin-top:8px;}
+  .panel .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:8px; background:#111; color:#fff; margin-bottom:10px;}
+  .panel .badge.a1{background:#5b6bff;}
+  .panel .badge.a2{background:#e0396b;}
+  .panel .badge.both{background:#181a24;}
+  .panel .card.mission{background:#181a24;}
+  .panel .card.mission .badge{background:#5b6bff;}
+  .panel .card.mission p, .panel .card.mission .wikiquote{color:#e7e9f5;}
+  .wikiquote{
+    border-left:3px solid var(--ai); padding:9px 13px; margin:4px 0 10px; font-size:12.5px;
+    font-style:italic; color:#333; background:#f7f8ff; border-radius:0 8px 8px 0; line-height:1.65;
+  }
+  .card.mission .wikiquote{background:rgba(255,255,255,0.06); border-left-color:#8f9bff;}
+  .quotelabel{font-size:10.5px; color:#9a9ea8; margin-top:-4px; margin-bottom:2px;}
+  .card.mission .quotelabel{color:#7d84a0;}
+
+  /* 지금 보고 있는 화면 안내 (탭 전환할 때마다 갱신) */
+  .panel .card.note{ padding:16px 20px; }
+  .panel .card.note.on{ background:#eef0ff; border:1px solid #d9dcff; }
+  .panel .card.note.off{ background:#f4f4f6; border:1px solid #ececec; }
+  .panel .card.note .note-label{ font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:#9a9ea8; font-weight:800; margin-bottom:6px; }
+  .panel .card.note.on .note-text{ font-size:13px; font-weight:700; color:#3f45c9; line-height:1.55; }
+  .panel .card.note.off .note-text{ font-size:13px; font-weight:600; color:#9a9a9a; line-height:1.55; }
+</style>
+</head>
+<body>
+
+<div class="modebar">
+  <button id="btn-asis" class="active" onclick="setMode('asis')">AS-IS</button>
+  <button id="btn-purpose" onclick="setMode('purpose')">기능→목적</button>
+  <button id="btn-attr" onclick="setMode('attr')">채널→속성</button>
+  <button id="btn-both" onclick="setMode('both')">완성형</button>
+</div>
+
+<div class="stage">
+
+  <div class="phone-col">
+    <div class="phone-label" id="phoneLabel"></div>
+    <div class="phone">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="icons">📶 🔋</span>
+        </div>
+        <div class="app-body" id="appBody"></div>
+        <div class="tabbar" id="tabbar"></div>
+
+        <!-- thread detail overlay -->
+        <div class="overlay" id="overlay">
+          <div class="close-x" onclick="closeOverlay()">✕</div>
+          <div id="overlayInner" style="display:flex; flex-direction:column; height:100%;"></div>
+        </div>
+
+        <!-- in call overlay -->
+        <div class="incall" id="incall">
+          <div class="avatar" id="incallAvatar">👤</div>
+          <div class="nm" id="incallName">상대방</div>
+          <div class="sub" id="incallSub">연결 중...</div>
+          <div class="transcript" id="incallTranscript"></div>
+          <div class="aitag">✨ AI가 실시간 통화 내용을 보여드려요</div>
+          <div class="endbtn" onclick="endCall()">📞</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="card mission">
+      <span class="badge">핵심 미션</span>
+      <div class="wikiquote">"AI Native Communication 서비스"<br>카카오톡, DM, 슬랙 등 다양한 서비스에서 발생하는 커뮤니케이션을 우리 서비스 안에서도 일어나게 만드는 것</div>
+      <div class="quotelabel">— 위키 「(정리중) New AI Native Comm 서비스 아이데이션」</div>
+    </div>
+    <div id="modeCard"></div>
+    <div id="screenNote"></div>
+  </div>
+</div>
+
+<script>
+/* ===================== DATA ===================== */
+const contacts = [
+  {id:'gf', emoji:'💕', name:'💕🧸💕', rel:'fam', relLabel:'가족',
+    lastIcon:'📞', lastText:'내일 만남 계획과 천호동에 대한 대화', lastTime:'어제',
+    events:[
+      {type:'call', time:'오늘 08:33', ai:'출근과 퇴근 시간 조율', dur:'0:47'},
+      {type:'call', time:'오늘 00:01', ai:'술자리 후 영상통화 약속 논의', dur:'0:55'},
+      {type:'text', time:'어제 21:03', body:'사진 1장 전송 — 오늘 저녁 메뉴 사진'},
+      {type:'call', time:'어제 23:26', ai:'내일 만남 계획과 천호동에 대한 대화', dur:'10:31'},
+      {type:'call', time:'어제 22:11', ai:'퇴근 후 만남과 대화 약속', dur:'0:23'}
+    ]},
+  {id:'wrk', emoji:'👔', name:'직장 동료 (010-2090-9011)', rel:'wrk', relLabel:'회사',
+    lastIcon:'💬', lastText:'예외 처리 우선순위와 테스트 계획 논의', lastTime:'화',
+    events:[
+      {type:'call', time:'화 11:42', ai:'예외 처리 우선과 테스트 계획 논의', dur:'2:04'},
+      {type:'text', time:'화 09:03', body:'RCS · 화면 캡쳐 1장 전송'},
+      {type:'call', time:'월 21:07', ai:'통화 연결 안 됨'}
+    ]},
+  {id:'est', emoji:'🏠', name:'다솜 공인중개사', rel:'etc', relLabel:'부동산',
+    lastIcon:'📞', lastText:'집 계약과 부동산 일정 조율 논의', lastTime:'7.1',
+    events:[
+      {type:'call', time:'7.1 11:48', ai:'집 계약과 부동산 일정 조율 논의', dur:'3:39'},
+      {type:'text', time:'6.30 09:12', body:'매물 사진 3장 전송'},
+      {type:'text', time:'6.28 14:02', body:'문자 — 방문 가능 시간 문의'}
+    ]},
+  {id:'hos', emoji:'🏥', name:'밴스의원 목동점', rel:'etc', relLabel:'병원',
+    lastIcon:'🔔', lastText:'(광고) 공휴일 정상진료 안내', lastTime:'7.14',
+    events:[
+      {type:'text', time:'7.14 16:32', body:'알림톡 — 공휴일 정상진료 안내'},
+      {type:'call', time:'6.02 10:20', ai:'예약 변경 문의', dur:'1:12'}
+    ]},
+  {id:'frd', emoji:'🍻', name:'민재언니', rel:'frn', relLabel:'친구',
+    lastIcon:'📞', lastText:'아파트 출입 문제와 해결 방안 논의', lastTime:'2.27',
+    events:[
+      {type:'call', time:'2.27 14:28', ai:'아파트 출입 문제와 해결 방안 논의', dur:'0:41'},
+      {type:'call', time:'2.27 14:21', ai:'통화 47초', dur:'0:53'}
+    ]},
+  {id:'biz', emoji:'💼', name:'김태은 (Wallet Service)', rel:'wrk', relLabel:'회사',
+    lastIcon:'📞', lastText:'비즈니스 프로필 서비스 협력 논의', lastTime:'7.14',
+    events:[
+      {type:'call', time:'7.14 11:50', ai:'비즈니스 프로필 서비스 협력 논의', dur:'2:11'}
+    ]},
+  {id:'del', emoji:'📦', name:'CJ대한통운', rel:'etc', relLabel:'배송',
+    lastIcon:'💬', lastText:'핀턱 나일론 팬츠 배송완료', lastTime:'7.15',
+    events:[
+      {type:'text', time:'7.15 15:49', body:'MMS — 배송완료 안내'},
+      {type:'text', time:'7.15 13:11', body:'MMS — 배송출발 안내'}
+    ]}
+];
+
+/* 목적(목표) 기반 통합 — 서로 다른 상대와의 커뮤니케이션이 같은 목적으로 묶이는 예시 (위키 archive v0.2) */
+const purposes = [
+  {id:'bday', icon:'🎂', title:'생일선물 준비', subtitle:'친구 D · 백화점 · 배송업체',
+    members:[
+      {name:'친구 D (친구)', status:'같이 살지 물어봄 · 완료'},
+      {name:'백화점 매장 (기타)', status:'재고 확인 · 완료'},
+      {name:'배송업체 (기타)', status:'배송 일정 조율 중'}
+    ],
+    aiAction:'배송업체와 일정이 정해지면, 친구 D에게 도착 예정일을 자동으로 알려드릴게요.'},
+  {id:'checkup', icon:'🏥', title:'건강검진', subtitle:'병원 · 아버지 · 어머니',
+    members:[
+      {name:'병원 (기타)', status:'예약 확정'},
+      {name:'아버지 (가족)', status:'일정 전달 대기'},
+      {name:'어머니 (가족)', status:'미답변'}
+    ],
+    aiAction:'어머니가 답변이 없으면 제가 대신 다시 여쭤보고, 확정되면 아버지께 자동으로 전달할게요.'},
+  {id:'busan', icon:'✈️', title:'부산출장', subtitle:'팀장님 · 부산 거래처 · KTX',
+    members:[
+      {name:'팀장님 (회사)', status:'일정 확정'},
+      {name:'부산 거래처 (기타)', status:'미팅 시간 조율 중'},
+      {name:'KTX 고객센터 (안내)', status:'예매 완료'}
+    ],
+    aiAction:'거래처 미팅 시간이 정해지면, KTX 예매 시간도 자동으로 다시 맞춰드릴게요.'}
+];
+
+/* attribute -> familiar-mode mapping (from wiki) */
+function mapAttr(sync, len, mode){
+  const key = sync+'|'+len+'|'+mode;
+  const known = {
+    '동기|긴것|음성': {label:'📞 전화', desc:'실시간으로 길게, 음성으로 — 가장 정통적인 통화 방식', kind:'call'},
+    '동기|짧은것|영상': {label:'🎬 Setlog', desc:'실시간으로 짧게, 영상으로 — 순간을 빠르게 공유', kind:'send'},
+    '비동기|짧은것|영상': {label:'📸 인스타 스토리', desc:'비동기로 짧게, 영상/사진으로 — 나중에 봐도 되는 순간 공유', kind:'send'},
+    '동기|짧은것|텍스트': {label:'💬 카톡', desc:'실시간으로 짧게, 텍스트로 — 가벼운 실시간 대화', kind:'send'},
+    '비동기|긴것|텍스트': {label:'📢 공지', desc:'비동기로 길게, 텍스트로 — 한 번에 정리해서 여러 명에게', kind:'send'}
+  };
+  if(known[key]) return known[key];
+  return {label:'✨ 새로운 조합', desc:'아직 이름 붙지 않은 방식 — AI가 상황에 맞게 직접 구성해요', kind:'send'};
+}
+
+/* ===================== MODE / STATE ===================== */
+// mode: 'asis' | 'purpose' | 'attr' | 'both'
+//  - purpose => 탭이 기능(연락처/최근기록/키패드) 중심에서 목적(관계/타임라인/연결) 중심으로 재편되고,
+//               서로 다른 상대에 걸친 커뮤니케이션이 '목적' 단위로 묶여 보임
+//  - attr    => 진입점(키패드/연결)이 채널 선택 대신 속성(동기성·길이·표현방식) 조합 방식으로 바뀜
+let mode = 'asis';
+let attr = {sync:'동기', len:'긴것', voice:'음성'};
+let selectedWho = contacts[0];
+
+// remember which tab is active within each tab-set so switching modes feels natural
+let tabByMode = { asis:'recent', purpose:'timeline', attr:'keypad', both:'connect' };
+
+const MODE_META = {
+  asis:    {btn:'btn-asis',    label:'AS-IS <span class="sub">— 현재 UI 그대로</span>', hasAttr:false, hasPurpose:false},
+  purpose: {btn:'btn-purpose', label:'기능 → 목적 <span class="sub">— 탭 구조 재편 + 목적별 묶음</span>', hasAttr:false, hasPurpose:true},
+  attr:    {btn:'btn-attr',    label:'채널 → 속성 <span class="sub">— 진입점만 변경</span>', hasAttr:true, hasPurpose:false},
+  both:    {btn:'btn-both',   label:'완성형 <span class="sub">— 목적 중심 탭 + 속성 조합 진입점</span>', hasAttr:true, hasPurpose:true}
+};
+
+function setMode(m){
+  mode = m;
+  Object.values(MODE_META).forEach(v=> document.getElementById(v.btn).classList.remove('active'));
+  document.getElementById(MODE_META[m].btn).classList.add('active');
+  document.getElementById('phoneLabel').innerHTML = MODE_META[m].label;
+  renderModeCard(m);
+  render();
+}
+
+function renderModeCard(m){
+  const cards = {
+    asis: `<div class="card">
+      <span class="badge">AS-IS</span>
+      <div class="wikiquote">"지금의 에이닷 전화는 'Communication Service'가 아니라 'AI Call Service'에 가깝다."</div>
+      <div class="quotelabel">— 위키 「2. 전화 → Communication Service → AI Native」</div>
+      <p>통화·문자가 각각 관리되고 AI는 요약·통역 같은 개별 기능만 지원하는 지금 구조예요. 아래 세 버전을 비교할 기준선입니다.</p>
+    </div>`,
+    purpose: `<div class="card">
+      <span class="badge a2">기능 → 목적</span>
+      <div class="wikiquote">"예전에는 커뮤니케이션을 기능 단위로 이해해왔음 — 전화 · 문자 · 메신저 · 통역 · 요약."<br>"하지만 앞으로는 기능 자체보다 사용자의 목적이 중요해질 것. 사용자가 원하는 것은 이런 목적 — 상대에게 닿기 · 일정 조율하기 · 정보 전달하기 · 답변 받기."</div>
+      <div class="quotelabel">— 위키 「3-1. 기능 중심 → 목적 중심」</div>
+      <p>그래서 탭도 기능(연락처/최근기록/키패드)이 아니라 목적 중심(관계/타임라인/연결)으로 바뀝니다. '연결' 탭 자체는 아직 기존 숫자 키패드예요.</p>
+      <div class="wikiquote">"여러 통화·문자가 같은 목표를 향해 있다는 걸 AI가 인식해서 하나로 묶고, 그 목표를 대신 완수해주는 기능." (감지 → 통합 → 대신 처리)</div>
+      <div class="quotelabel">— 위키 「(archive) 목표 기반 통합 스레드」</div>
+      <p>타임라인 상단의 <b>목적 카드</b>를 눌러보세요 — 서로 다른 상대와의 통화·문자가 하나의 목적으로 묶여, 흩어져 있던 게 한 화면에서 정리돼요.</p>
+    </div>`,
+    attr: `<div class="card">
+      <span class="badge a1">채널 → 속성</span>
+      <div class="wikiquote">"전화와 메신저는 서로 다른 서비스가 아니라, 속성이 다르게 조합된 결과일 뿐임."<br>"AI가 채널을 선택하는 것이 아니라 목적에 맞는 Communication을 구성하는 것"</div>
+      <div class="quotelabel">— 위키 「3-2. 채널 → 속성(Attribute)」</div>
+      <p>탭 구조(연락처/최근기록/키패드)는 그대로 두고, <b>키패드만</b> 동기성·길이·표현방식을 조합하는 진입점으로 바꿨어요. AI 자동 모드도 여기서 확인할 수 있어요.</p>
+    </div>`,
+    both: `<div class="card">
+      <span class="badge both">완성형</span>
+      <div class="wikiquote">"우리가 만드는 것은 메신저 서비스도 아니고 전화 안에 메시지도 아니라, 전화에서 시작되는 Communication Service임."<br>"AI Native Communication은 AI가 채널을 선택하는 것이 아니라, 목적에 맞는 Communication 자체를 구성하는 것이다."</div>
+      <div class="quotelabel">— 위키 「핵심 메시지」</div>
+      <p>목적 중심 탭 재편과 속성 기반 진입점이 모두 적용된 형태예요. 위키에서 말한 논리가 실제 화면으로 구현된 버전입니다.</p>
+    </div>`
+  };
+  document.getElementById('modeCard').innerHTML = cards[m];
+}
+
+function tabsForMode(){
+  const hasPurpose = MODE_META[mode].hasPurpose;
+  if(hasPurpose){
+    // 완성형에서는 '연결'이 AI Native Communication의 핵심 진입점 — 가운데 강조된 형태로
+    if(mode === 'both'){
+      return [
+        {k:'rel', label:'관계', ico:'💛'},
+        {k:'connect', label:'연결', ico:'⚡'},
+        {k:'timeline', label:'타임라인', ico:'🧵'}
+      ];
+    }
+    return [
+      {k:'rel', label:'관계', ico:'💛'},
+      {k:'timeline', label:'타임라인', ico:'🧵'},
+      {k:'connect', label:'연결', ico:'⚡'}
+    ];
+  }
+  return [
+    {k:'contacts', label:'연락처', ico:'👤'},
+    {k:'recent', label:'최근 기록', ico:'🕓'},
+    {k:'keypad', label:'키패드', ico:'⌨️'}
+  ];
+}
+
+/* 모드별로 가장 강조해야 할 탭 (탭바에 NEW 배지 표시. 완성형의 연결은 hero 스타일로 이미 강조되므로 제외) */
+const SPOTLIGHT_TAB = { asis:null, purpose:'timeline', attr:'keypad', both:null };
+
+/* 모드 x 현재 탭 조합별로 '뭐가 바뀌었는지' 알려주는 데이터 — 화면 안이 아니라 사이드 패널에 표시 */
+function changeInfo(tabKey){
+  const map = {
+    purpose: {
+      rel:      {on:true,  text:'연락처 → 관계 중심 화면. 가족·친구·회사 태그로 묶여요'},
+      timeline: {on:true,  text:'최근기록 → 타임라인. 통화·문자가 하나로 이어지고, 목적별로도 묶여요'},
+      connect:  {on:false, text:'아직 변화 없음 — 키패드 그대로예요 (채널→속성 아이디어는 미적용)'}
+    },
+    attr: {
+      contacts: {on:false, text:'아직 변화 없음 — 연락처 화면 그대로예요'},
+      recent:   {on:false, text:'아직 변화 없음 — 최근기록 화면 그대로예요'},
+      keypad:   {on:true,  text:'키패드 → 연결. 번호 대신 속성을 조합해서 시작해요'}
+    },
+    both: {
+      connect:  {on:true,  text:'핵심 변화 — 이제 가장 먼저 만나는 화면이에요. 번호 대신 속성 조합으로 시작해요'},
+      rel:      {on:true,  text:'연락처 → 관계 중심 화면'},
+      timeline: {on:true,  text:'최근기록 → 타임라인. 목적별로 묶여요'}
+    }
+  };
+  return (map[mode] && map[mode][tabKey]) || null;
+}
+function updateScreenNote(tabKey){
+  const el = document.getElementById('screenNote');
+  if(!el) return;
+  const entry = changeInfo(tabKey);
+  if(!entry){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card note ${entry.on?'on':'off'}">
+    <div class="note-label">지금 보고 있는 화면</div>
+    <div class="note-text">${entry.on ? '✨' : '—'} ${entry.text}</div>
+  </div>`;
+}
+
+/* ===================== RENDER ROOT ===================== */
+function render(){
+  closeOverlay();
+  const tabs = tabsForMode();
+  const active = tabByMode[mode];
+  const spotlight = SPOTLIGHT_TAB[mode];
+  const tabbarEl = document.getElementById('tabbar');
+  tabbarEl.classList.toggle('hero-nav', mode==='both');
+  tabbarEl.innerHTML = tabs.map(t=>{
+    const isHero = (mode==='both' && t.k==='connect');
+    const cls = ['tab'];
+    if(active===t.k) cls.push('active');
+    if(spotlight===t.k) cls.push('spotlight');
+    if(mode==='both') cls.push(isHero ? 'hero' : 'minor');
+    return `<div class="${cls.join(' ')}" onclick="switchTab('${t.k}')"><span class="ico">${t.ico}</span>${t.label}</div>`;
+  }).join('');
+
+  updateScreenNote(active);
+
+  let html = '';
+  const hasAttr = MODE_META[mode].hasAttr;
+  const hasPurpose = MODE_META[mode].hasPurpose;
+
+  if(active==='contacts'){
+    html += `<div class="topnav"><div class="ttl">전화</div><div class="icons">🔍</div></div>`;
+    html += `<div class="section-label">연락처</div>`;
+    contacts.slice().sort((a,b)=>a.name.localeCompare(b.name,'ko')).forEach(c=>{ html += rowSimple(c); });
+  } else if(active==='recent'){
+    html += `<div class="topnav"><div class="ttl">최근 모든 기록 ⌄</div><div class="icons">🔍 ⏺</div></div>`;
+    contacts.slice().sort((a,b)=> a.lastTime<b.lastTime?1:-1).forEach(c=>{ html += rowSimple(c); });
+  } else if(active==='keypad'){
+    html += hasAttr ? renderConnect() : renderPlainKeypad();
+  } else if(active==='rel'){
+    html += `<div class="topnav"><div class="ttl">관계</div><div class="icons">🔍</div></div>`;
+    html += `<div class="chiprow">
+      <div class="chip on">전체</div><div class="chip">가족</div><div class="chip">친구</div><div class="chip">회사</div><div class="chip">기타</div>
+    </div>`;
+    contacts.forEach(c=>{ html += rowRel(c); });
+  } else if(active==='timeline'){
+    html += `<div class="topnav"><div class="ttl">타임라인</div><div class="icons">🔍</div></div>`;
+    html += renderPurposeSection();
+    html += `<div class="section-label">진행 중인 Communication</div>`;
+    contacts.slice().sort((a,b)=> a.lastTime<b.lastTime?1:-1).forEach(c=>{ html += rowRel(c); });
+  } else if(active==='connect'){
+    html += hasAttr ? renderConnect() : renderPlainKeypad();
+  }
+  document.getElementById('appBody').innerHTML = html;
+}
+
+/* ---- 목적(목표) 기반 통합 섹션 — 기능→목적 아이디어의 확장 ---- */
+function renderPurposeSection(){
+  let html = `<div class="section-label">🎯 진행 중인 목적</div>
+    <div class="chiprow" style="padding-top:0;">`;
+  purposes.forEach(p=>{
+    html += `<div class="chip" style="padding:0; background:none; flex-shrink:0;" onclick="openPurpose('${p.id}')">
+      <div style="background:linear-gradient(135deg,#eef1ff,#e9fbf4); border:1px solid #e4e7ff; border-radius:16px; padding:12px 16px; width:150px;">
+        <div style="font-size:22px; margin-bottom:6px;">${p.icon}</div>
+        <div style="font-size:13.5px; font-weight:800; color:#181a24; margin-bottom:3px;">${p.title}</div>
+        <div style="font-size:11px; color:#8b8fa3; white-space:normal; line-height:1.4;">${p.subtitle}</div>
+      </div>
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
+function openPurpose(id){
+  const p = purposes.find(x=>x.id===id);
+  let memHtml = p.members.map(mm=>{
+    const done = mm.status.includes('완료') || mm.status.includes('확정');
+    const pending = mm.status.includes('미답변') || mm.status.includes('대기');
+    const color = done ? '#249a4a' : (pending ? '#e0396b' : '#8b6f00');
+    const bg = done ? '#eaf7ec' : (pending ? '#ffe3ea' : '#fff6e0');
+    return `<div class="row" style="cursor:default;">
+      <div class="avatar" style="background:linear-gradient(135deg,#eef1ff,#e9fbf4); font-size:16px;">👤</div>
+      <div class="body">
+        <div class="name-line">${mm.name}</div>
+        <div class="snippet"><span style="color:${color}; background:${bg}; padding:2px 8px; border-radius:8px; font-weight:700; font-size:11px;">${mm.status}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('overlayInner').innerHTML = `
+    <div class="thread-top">
+      <div class="avatar" style="font-size:20px;">${p.icon}</div>
+      <div class="nm">${p.title}</div>
+    </div>
+    <div style="font-size:11.5px; color:#8b8fa3; text-align:center; padding:8px 20px 0;">서로 다른 상대와의 통화·문자가 '${p.title}'이라는 하나의 목적으로 묶였어요</div>
+    <div class="thread-scroll">
+      ${memHtml}
+      <div class="ai-card" style="margin:16px 4px 0;">
+        <div class="h">✨ AI가 대신 하는 일</div>
+        <div class="s">${p.aiAction}</div>
+      </div>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('show');
+}
+function switchTab(k){ tabByMode[mode] = k; render(); }
+
+/* ---- plain (as-is) rows / keypad ---- */
+function rowSimple(c){
+  return `<div class="row" onclick="openThread('${c.id}')">
+    <div class="avatar">${c.emoji}</div>
+    <div class="body">
+      <div class="name-line">${c.name}</div>
+      <div class="snippet"><span class="ico">${c.lastIcon}</span>${c.lastText}</div>
+    </div>
+    <div class="meta">${c.lastTime}</div>
+    <div class="callbtn">📞</div>
+  </div>`;
+}
+function rowRel(c){
+  return `<div class="row" onclick="openThread('${c.id}')">
+    <div class="avatar">${c.emoji}</div>
+    <div class="body">
+      <div class="name-line">${c.name.split(' (')[0]} <span class="tagpill ${c.rel}">${c.relLabel}</span></div>
+      <div class="snippet"><span class="ico">${c.lastIcon}</span>${c.lastText}</div>
+    </div>
+    <div class="meta">${c.lastTime}</div>
+  </div>`;
+}
+function renderPlainKeypad(){
+  let html = `<div class="topnav"><div class="ttl">전화</div><div class="icons">🔍</div></div>`;
+  html += `<div class="ai-card"><div class="h">✨ 이 시간대는 통화량이 많은 편이에요</div><div class="s">평균 3분 37초 통화해요</div></div>`;
+  const keys = [['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ'],['*',''],['0','+'],['#','']];
+  html += `<div class="keypad">`;
+  keys.forEach(k=>{ html += `<div class="key">${k[0]}<small>${k[1]}</small></div>`; });
+  html += `</div>`;
+  html += `<div style="display:flex; justify-content:center;"><div class="dialbtn">📞</div></div>`;
+  return html;
+}
+
+/* ---- connect screen (채널 → 속성) — AI 자동과 직접 선택을 한 화면에 ---- */
+function renderConnect(){
+  let html = `<div class="topnav"><div class="ttl">연결</div><div class="icons">🔍</div></div>`;
+
+  html += `<div class="connect-section-label">✨ AI에게 맡기기</div>`;
+  html += autoBlock();
+
+  html += `<div class="connect-divider">또는 직접 선택</div>`;
+
+  html += `<div class="who-picker"><div class="attr-title" style="padding-left:2px;">누구와</div>
+    <div class="who-scroll">`;
+  contacts.forEach(c=>{
+    html += `<div class="who-item ${selectedWho.id===c.id?'sel':''}" onclick="pickWho('${c.id}')">
+      <div class="avatar">${c.emoji}</div><div class="nm">${c.name.split(' (')[0].slice(0,5)}</div>
+    </div>`;
+  });
+  html += `</div></div>`;
+  html += manualAttrBlock();
+  return html;
+}
+function pickWho(id){ selectedWho = contacts.find(c=>c.id===id); render(); }
+
+function manualAttrBlock(){
+  const m = mapAttr(attr.sync, attr.len, attr.voice);
+  let html = `<div class="attr-block">
+    <div class="attr-title">동기성</div>
+    <div class="attr-opts">
+      <div class="opt ${attr.sync==='동기'?'on':''}" onclick="setAttr('sync','동기')">동기 (실시간)</div>
+      <div class="opt ${attr.sync==='비동기'?'on':''}" onclick="setAttr('sync','비동기')">비동기 (나중에)</div>
+    </div>
+    <div class="attr-title">길이</div>
+    <div class="attr-opts">
+      <div class="opt ${attr.len==='짧은것'?'on':''}" onclick="setAttr('len','짧은것')">짧게</div>
+      <div class="opt ${attr.len==='긴것'?'on':''}" onclick="setAttr('len','긴것')">길게</div>
+    </div>
+    <div class="attr-title">표현 방식</div>
+    <div class="attr-opts">
+      <div class="opt ${attr.voice==='음성'?'on':''}" onclick="setAttr('voice','음성')">음성</div>
+      <div class="opt ${attr.voice==='텍스트'?'on':''}" onclick="setAttr('voice','텍스트')">텍스트</div>
+      <div class="opt ${attr.voice==='영상'?'on':''}" onclick="setAttr('voice','영상')">사진·영상</div>
+    </div>
+  </div>`;
+  html += `<div class="result-card ${m.kind==='call'?'call':''}">
+    <div class="label">${selectedWho.name.split(' (')[0]} 님에게</div>
+    <div class="big">${m.label}</div>
+    <div class="desc">${m.desc}</div>
+    <div class="go" onclick="startFromResult('${m.kind}')">${m.kind==='call'?'전화 걸기':'시작하기'}</div>
+  </div>`;
+  html += `<div class="ref-table">
+    <div class="rtrow"><span>동기+긴것+음성</span><b>전화</b></div>
+    <div class="rtrow"><span>동기+짧은것+영상</span><b>Setlog</b></div>
+    <div class="rtrow"><span>비동기+짧은것+영상</span><b>인스타 스토리</b></div>
+    <div class="rtrow"><span>동기+짧은것+텍스트</span><b>카톡</b></div>
+    <div class="rtrow"><span>비동기+긴것+텍스트</span><b>공지</b></div>
+  </div>`;
+  return html;
+}
+function setAttr(k,v){ attr[k]=v; render(); }
+function startFromResult(kind){
+  if(kind==='call') startCall(selectedWho);
+  else { alert(selectedWho.name.split(' (')[0] + '님에게 ' + mapAttr(attr.sync,attr.len,attr.voice).label + ' 방식으로 커뮤니케이션을 시작합니다. (프로토타입)'); }
+}
+
+const presets = [
+  '엄마한테 병원 결과 알려줘',
+  '친구들한테 금요일 약속 다시 확인해줘',
+  '팀장님한테 프로젝트 지연됐다고 급하게 알려줘',
+  '친구 생일선물 뭐 살지 같이 알아봐줘',
+  '부동산에 계약서 사진 보내줘'
+];
+let lastPlan = null;
+function autoBlock(){
+  return `<div class="autobox">
+    <div class="q">무엇을 하고 싶으세요? 채널은 AI가 골라드려요.</div>
+    <div class="inputline"><span>💬</span><input id="autoInput" placeholder="예: 엄마한테 병원 결과 알려줘" /></div>
+    <div>${presets.map(p=>`<span class="presetchip" onclick="runAuto('${p}')">${p}</span>`).join('')}</div>
+    <div id="autoResult"></div>
+  </div>`;
+}
+function runAuto(text){
+  const box = document.getElementById('autoResult');
+  document.getElementById('autoInput').value = text;
+  box.innerHTML = `<div class="thinking">✨ AI가 상황을 판단하고 있어요 <span class="dotload"><span></span><span></span><span></span></span></div>`;
+  setTimeout(()=>{
+    let plan;
+    if(text.includes('병원')){
+      plan = {title:'📩 사진 + 텍스트로 먼저 전달', steps:[
+        '지금은 실시간 통화가 필요한 내용은 아니라고 판단했어요',
+        '검사 결과 사진과 요약 텍스트를 어머니께 비동기로 전송할게요',
+        '오늘 저녁까지 확인이 없으면, 제가 대신 전화로 다시 확인할게요'
+      ]};
+    } else if(text.includes('약속')){
+      plan = {title:'💬 그룹에게 짧은 텍스트로 재확인', steps:[
+        '평소 대화가 잦은 친구 그룹이라 텍스트가 자연스럽다고 판단했어요',
+        '"금요일 저녁 7시 약속 그대로 맞죠?" 메시지를 동시에 전송할게요',
+        '한 명이라도 응답이 없으면, 제가 개별로 다시 물어볼게요'
+      ]};
+    } else if(text.includes('팀장') || text.includes('지연')){
+      plan = {title:'📞 지금 바로 전화 연결', steps:[
+        '업무 지연은 긴급하고 오해 소지가 있는 내용이라, 텍스트보다 통화가 낫다고 판단했어요',
+        '팀장님께 바로 전화를 걸고, 지연 사유와 예상 일정을 순서대로 설명할게요',
+        '통화가 끝나면 방금 나눈 내용을 요약해서 자동으로 기록해둘게요'
+      ]};
+    } else if(text.includes('생일')){
+      plan = {title:'🎂 여러 사람에게 나눠서 알아보고 모아드릴게요', steps:[
+        '혼자 정하기 어려운 결정이라, 관련된 사람들에게 나눠서 물어보는 게 낫다고 판단했어요',
+        '친구 D한테 같이 살지 물어보고, 백화점에 재고를 확인하고, 배송업체 일정도 같이 조율할게요',
+        '세 곳의 답이 모이면 "생일선물 준비"라는 하나의 진행 상황으로 정리해서 타임라인에 보여드릴게요'
+      ]};
+    } else {
+      plan = {title:'📸 사진 자료를 비동기로 전달', steps:[
+        '실시간 확인이 필요한 내용이 아니라고 판단했어요',
+        '계약서 사진을 다솜 공인중개사님께 전송할게요',
+        '중요 조건 관련 답변이 오면 알려드릴게요, 필요하면 전화로 이어갈게요'
+      ]};
+    }
+    lastPlan = plan;
+    box.innerHTML = `<div class="plan-card">
+      <div style="font-weight:800; font-size:14.5px;">${plan.title}</div>
+      <ul class="steps" id="planSteps">${plan.steps.map((s,i)=>`<li data-i="${i}"><span class="n">${i+1}</span><span class="stxt">${s}</span></li>`).join('')}</ul>
+      <div class="plan-actions" id="planActions">
+        <div class="a edit" onclick="render()">직접 조정할래요</div>
+        <div class="a go" onclick="executePlan()">이대로 진행</div>
+      </div>
+    </div>`;
+  }, 900);
+}
+function executePlan(){
+  if(!lastPlan) return;
+  const actions = document.getElementById('planActions');
+  const items = document.querySelectorAll('#planSteps li');
+  items.forEach(li => { li.style.transition = 'opacity .3s'; li.style.opacity = '0.35'; });
+  actions.innerHTML = `<div class="thinking">✨ AI가 대신 실행하고 있어요 <span class="dotload"><span></span><span></span><span></span></span></div>`;
+  let i = 0;
+  function stepNext(){
+    if(i >= items.length){
+      actions.innerHTML = `<div style="color:var(--green); font-weight:800; font-size:13.5px;">✅ 완료! 진행 상황은 타임라인에서 계속 확인할 수 있어요.</div>`;
+      return;
+    }
+    const li = items[i];
+    li.style.opacity = '1';
+    const n = li.querySelector('.n');
+    n.textContent = '✓';
+    n.style.background = 'var(--green)';
+    i++;
+    setTimeout(stepNext, 650);
+  }
+  setTimeout(stepNext, 500);
+}
+
+/* ===================== THREAD OVERLAY ===================== */
+function openThread(id){
+  const c = contacts.find(x=>x.id===id);
+  const unified = MODE_META[mode].hasPurpose; // 목적 중심 구조가 적용되어야 통화+문자가 하나로 이어짐
+  let evHtml = '';
+  c.events.forEach(e=>{
+    if(e.type==='call'){
+      evHtml += `<div class="ev">
+        <div class="ev-head"><span class="ic">📞</span>${e.time}${e.dur? ' · '+e.dur:''}</div>
+        <div class="bubble call">
+          ${e.ai?`<div class="aiSummary">✨ ${e.ai}</div>`:''}
+          <div class="play">▶ 통화 녹음 재생 · ${e.dur||''}</div>
+        </div>
+      </div>`;
+    } else {
+      evHtml += `<div class="ev">
+        <div class="ev-head"><span class="ic">💬</span>${e.time}</div>
+        <div class="bubble text">${e.body}</div>
+      </div>`;
+    }
+  });
+  const headerNote = unified
+    ? `<div style="font-size:11.5px; color:#8b8fa3; text-align:center; padding:8px 20px 0;">📞 + 💬 가 하나의 Communication으로 이어집니다</div>`
+    : `<div style="font-size:11.5px; color:#c7cad3; text-align:center; padding:8px 20px 0;">통화 기록과 메시지가 각각 분리되어 있어요</div>`;
+  document.getElementById('overlayInner').innerHTML = `
+    <div class="thread-top">
+      <div class="avatar">${c.emoji}</div>
+      <div class="nm">${c.name.split(' (')[0]}</div>
+      <span class="icn">📞</span><span class="icn">🔍</span>
+    </div>
+    ${headerNote}
+    <div class="thread-scroll">${evHtml}</div>
+  `;
+  document.getElementById('overlay').classList.add('show');
+}
+function closeOverlay(){ document.getElementById('overlay').classList.remove('show'); }
+
+/* ===================== IN-CALL MOCK ===================== */
+function startCall(c){
+  document.getElementById('incallAvatar').textContent = c.emoji;
+  document.getElementById('incallName').textContent = c.name.split(' (')[0];
+  document.getElementById('incallSub').textContent = '에이닷 거는 중...';
+  document.getElementById('incallTranscript').innerHTML = '통화가 연결되면 AI가 실시간 스크립트를 보여드려요.';
+  document.getElementById('incall').classList.add('show');
+  setTimeout(()=>{
+    document.getElementById('incallSub').textContent = '00:07';
+    document.getElementById('incallTranscript').innerHTML = '상대방: 여보세요<br>나: 어 나야, 잠깐 통화 괜찮아?';
+  }, 1200);
+}
+function endCall(){ document.getElementById('incall').classList.remove('show'); }
+
+/* ===================== INIT ===================== */
+(function(){
+  const params = new URLSearchParams(location.search);
+  const initMode = params.get('mode');
+  const locked = params.get('locked') === '1';
+  if(locked){
+    const mb = document.querySelector('.modebar');
+    if(mb) mb.style.display = 'none';
+  }
+  setMode(initMode && MODE_META[initMode] ? initMode : 'asis');
+})();
+</script>
+</body>
+</html>
